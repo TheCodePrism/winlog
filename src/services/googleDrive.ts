@@ -21,6 +21,8 @@ export async function getLatestBackup(accessToken: string): Promise<DriveFile | 
   );
 
   if (!response.ok) {
+    const err = await response.text();
+    console.error('Drive list error:', err);
     throw new Error('Failed to search for backup file');
   }
 
@@ -43,6 +45,8 @@ export async function downloadBackup(accessToken: string, fileId: string): Promi
   );
 
   if (!response.ok) {
+    const err = await response.text();
+    console.error('Drive download error:', err);
     throw new Error('Failed to download backup file');
   }
 
@@ -50,29 +54,28 @@ export async function downloadBackup(accessToken: string, fileId: string): Promi
 }
 
 /**
- * Uploads (creates or updates) the backup file using multipart upload
+ * Uploads (creates or updates) the backup file using multipart upload via FormData/Blob.
+ * This approach avoids manually managing Content-Length which browsers block.
  */
 export async function uploadBackup(accessToken: string, jsonData: string): Promise<void> {
   const existingFile = await getLatestBackup(accessToken);
   const isUpdate = !!existingFile;
 
+  // Build the multipart form using Blob to avoid Content-Length issues
   const metadata = {
     name: BACKUP_FILE_NAME,
     mimeType: 'application/json',
   };
 
-  const boundary = '-------314159265358979323846';
-  const delimiter = `\r\n--${boundary}\r\n`;
-  const closeDelimiter = `\r\n--${boundary}--`;
-
-  const multipartRequestBody =
-    delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    JSON.stringify(metadata) +
-    delimiter +
-    'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-    jsonData +
-    closeDelimiter;
+  const form = new FormData();
+  form.append(
+    'metadata',
+    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
+  );
+  form.append(
+    'file',
+    new Blob([jsonData], { type: 'application/json' })
+  );
 
   const url = isUpdate
     ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
@@ -83,11 +86,10 @@ export async function uploadBackup(accessToken: string, jsonData: string): Promi
   const response = await fetch(url, {
     method,
     headers: {
+      // Do NOT set Content-Type here — the browser sets it automatically with the correct boundary for FormData
       Authorization: `Bearer ${accessToken}`,
-      'Content-Type': `multipart/related; boundary=${boundary}`,
-      'Content-Length': multipartRequestBody.length.toString(),
     },
-    body: multipartRequestBody,
+    body: form,
   });
 
   if (!response.ok) {
