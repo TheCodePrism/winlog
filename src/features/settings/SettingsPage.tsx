@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { db } from '../../db/db';
 import { triggerConfetti } from '../../utils/confetti';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -21,8 +21,21 @@ export default function SettingsPage() {
   const [resetting, setResetting] = useState(false);
   const [cloudSyncing, setCloudSyncing] = useState(false);
   
-  const [googleToken, setGoogleToken] = useState<string | null>(null);
+  const [googleToken, setGoogleToken] = useState<string | null>(() => {
+    const saved = localStorage.getItem('winlog-google-token');
+    const expiry = localStorage.getItem('winlog-google-expiry');
+    if (saved && expiry && Date.now() < parseInt(expiry, 10)) {
+      return saved;
+    }
+    return null;
+  });
   const [lastBackupTime, setLastBackupTime] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (googleToken) {
+      checkLatestBackup(googleToken);
+    }
+  }, []);
 
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +61,9 @@ export default function SettingsPage() {
   const login = useGoogleLogin({
     scope: 'https://www.googleapis.com/auth/drive.file',
     onSuccess: (tokenResponse) => {
+      const expiresAt = Date.now() + (tokenResponse.expires_in || 3600) * 1000;
+      localStorage.setItem('winlog-google-token', tokenResponse.access_token);
+      localStorage.setItem('winlog-google-expiry', expiresAt.toString());
       setGoogleToken(tokenResponse.access_token);
       checkLatestBackup(tokenResponse.access_token);
       showMessage('Connected to Google Drive', 'success');
@@ -318,7 +334,12 @@ export default function SettingsPage() {
                 <Check className="h-4 w-4" /> Connected to Google Drive
               </span>
               <button 
-                onClick={() => { setGoogleToken(null); setLastBackupTime(null); }}
+                onClick={() => { 
+                  setGoogleToken(null); 
+                  setLastBackupTime(null); 
+                  localStorage.removeItem('winlog-google-token');
+                  localStorage.removeItem('winlog-google-expiry');
+                }}
                 className="flex items-center gap-1 text-xs font-medium hover:text-blue-800 dark:hover:text-blue-200"
               >
                 <LogOut className="h-3 w-3" /> Disconnect
