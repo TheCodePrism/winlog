@@ -10,22 +10,33 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      includeAssets: ['logo.png'],
       manifest: {
         name: 'Winlog',
         short_name: 'Winlog',
-        description: 'Success Tracker',
-        theme_color: '#000000',
+        description: 'Track your success journey — dreams, goals, milestones, and reflections.',
+        theme_color: '#6366f1',
+        background_color: '#0f172a',
+        display: 'standalone',
+        start_url: '/',
+        scope: '/',
+        orientation: 'portrait',
         icons: [
           {
-            src: '/assets/logo.png',
-            sizes: '1024x1024',
+            src: '/logo.png',
+            sizes: '192x192',
             type: 'image/png'
           },
           {
-            src: '/assets/logo.png',
+            src: '/logo.png',
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: '/logo.png',
             sizes: '512x512',
             type: 'image/png',
-            purpose: 'any maskable'
+            purpose: 'maskable'
           }
         ]
       }
