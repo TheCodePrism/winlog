@@ -54,28 +54,32 @@ export async function downloadBackup(accessToken: string, fileId: string): Promi
 }
 
 /**
- * Uploads (creates or updates) the backup file using multipart upload via FormData/Blob.
- * This approach avoids manually managing Content-Length which browsers block.
+ * Uploads (creates or updates) the backup file.
+ * Uses multipart/related as required by the Drive API.
+ * Content-Length is intentionally omitted — the browser sets it automatically.
  */
 export async function uploadBackup(accessToken: string, jsonData: string): Promise<void> {
   const existingFile = await getLatestBackup(accessToken);
   const isUpdate = !!existingFile;
 
-  // Build the multipart form using Blob to avoid Content-Length issues
   const metadata = {
     name: BACKUP_FILE_NAME,
     mimeType: 'application/json',
   };
 
-  const form = new FormData();
-  form.append(
-    'metadata',
-    new Blob([JSON.stringify(metadata)], { type: 'application/json' })
-  );
-  form.append(
-    'file',
-    new Blob([jsonData], { type: 'application/json' })
-  );
+  const boundary = `winlog_boundary_${Date.now()}`;
+  const delimiter = `\r\n--${boundary}\r\n`;
+  const closeDelimiter = `\r\n--${boundary}--`;
+
+  // multipart/related body: metadata part first, then file content part
+  const body =
+    `--${boundary}\r\n` +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) +
+    delimiter +
+    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
+    jsonData +
+    closeDelimiter;
 
   const url = isUpdate
     ? `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=multipart`
@@ -86,10 +90,12 @@ export async function uploadBackup(accessToken: string, jsonData: string): Promi
   const response = await fetch(url, {
     method,
     headers: {
-      // Do NOT set Content-Type here — the browser sets it automatically with the correct boundary for FormData
       Authorization: `Bearer ${accessToken}`,
+      // multipart/related is what Drive API expects — NOT multipart/form-data
+      'Content-Type': `multipart/related; boundary=${boundary}`,
+      // Do NOT set Content-Length — browsers forbid it and will set it automatically
     },
-    body: form,
+    body,
   });
 
   if (!response.ok) {
@@ -98,3 +104,4 @@ export async function uploadBackup(accessToken: string, jsonData: string): Promi
     throw new Error('Failed to upload backup to Google Drive');
   }
 }
+
